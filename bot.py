@@ -20,7 +20,9 @@ if not BOT_TOKEN or not IG_USERNAME or not IG_PASSWORD:
 # Авторизация Instagram
 cl = Client()
 try:
-    cl.login(IG_USERNAME, IG_PASSWORD)
+    cl.load_settings("ig_settings.json")
+    cl.get_timeline_feed()  # тестовый запрос
+    print("✅ Сессия Instagram загружена")
 except Exception as e:
     print(f"❌ Ошибка входа в Instagram: {e}")
     exit()
