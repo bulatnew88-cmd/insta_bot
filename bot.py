@@ -1,7 +1,7 @@
 import asyncio
 import os
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, BufferedInputFile
+from aiogram.types import Message, FSInputFile
 from instagrapi import Client
 from dotenv import load_dotenv
 
@@ -11,7 +11,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 IG_USERNAME = os.getenv("IG_USERNAME")
 IG_PASSWORD = os.getenv("IG_PASSWORD")
-ALLOWED_USERS = set(map(int, os.getenv("ALLOWED_USERS", "").split(",")))
+ALLOWED_USERS = set(map(int, filter(None, os.getenv("ALLOWED_USERS", "").split(","))))
 
 if not BOT_TOKEN or not IG_USERNAME or not IG_PASSWORD:
     print("❌ Ошибка: Проверь .env — должны быть заданы BOT_TOKEN, IG_USERNAME и IG_PASSWORD")
@@ -27,14 +27,9 @@ except Exception as e:
     print(f"❌ Ошибка входа в Instagram: {e}")
     exit()
 
-bot = Bot(token=BOT_TOKEN)
+# Увеличенный таймаут (важно для больших файлов)
+bot = Bot(token=BOT_TOKEN, request_timeout=120)
 dp = Dispatcher()
-
-def download_as_bytes(path):
-    """Читает файл в память и удаляет его"""
-    data = path.read_bytes()
-    path.unlink(missing_ok=True)
-    return data
 
 @dp.message(F.text)
 async def handle_instagram_link(message: Message):
@@ -44,7 +39,6 @@ async def handle_instagram_link(message: Message):
         return
 
     url = message.text.strip()
-
     if "instagram.com" not in url:
         await message.reply("Отправь мне ссылку на Instagram пост.")
         return
@@ -56,37 +50,33 @@ async def handle_instagram_link(message: Message):
 
         # Видео
         if media_info.media_type == 2:
-            video_path = cl.video_download_by_url(media_info.video_url)
-            video_bytes = download_as_bytes(video_path)
+            video_path = cl.video_download_by_url(media_info.video_url, folder="downloads")
             await message.reply_video(
-                BufferedInputFile(video_bytes, filename="video.mp4"),
+                FSInputFile(video_path),
                 caption=caption
             )
+            os.remove(video_path)
 
         # Фото
         elif media_info.media_type == 1:
-            photo_path = cl.photo_download_by_url(media_info.thumbnail_url)
-            photo_bytes = download_as_bytes(photo_path)
+            photo_path = cl.photo_download_by_url(media_info.thumbnail_url, folder="downloads")
             await message.reply_photo(
-                BufferedInputFile(photo_bytes, filename="photo.jpg"),
+                FSInputFile(photo_path),
                 caption=caption
             )
+            os.remove(photo_path)
 
         # Альбом
         elif media_info.media_type == 8:
             for item in media_info.resources:
                 if item.media_type == 1:
-                    img_path = cl.photo_download_by_url(item.thumbnail_url)
-                    img_bytes = download_as_bytes(img_path)
-                    await message.reply_photo(
-                        BufferedInputFile(img_bytes, filename="image.jpg")
-                    )
+                    img_path = cl.photo_download_by_url(item.thumbnail_url, folder="downloads")
+                    await message.reply_photo(FSInputFile(img_path))
+                    os.remove(img_path)
                 elif item.media_type == 2:
-                    vid_path = cl.video_download_by_url(item.video_url)
-                    vid_bytes = download_as_bytes(vid_path)
-                    await message.reply_video(
-                        BufferedInputFile(vid_bytes, filename="video.mp4")
-                    )
+                    vid_path = cl.video_download_by_url(item.video_url, folder="downloads")
+                    await message.reply_video(FSInputFile(vid_path))
+                    os.remove(vid_path)
 
     except Exception as e:
         await message.reply(f"❌ Ошибка: {e}")
@@ -97,3 +87,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
